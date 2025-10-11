@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  // ===== HELPER FUNCTIONS =====
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  function isEmailVerified() {
+    return isSignedIn() && request.auth.token.email_verified == true;
+  }
+
+  function isAdmin() {
+    return isSignedIn() && request.auth.token.admin == true;
+  }
+
+  function isOwner(field) {
+    return isSignedIn() && field == request.auth.uid;
+  }
+
+  match /databases/{database}/documents {
+
+    // ===== USERS =====
+    match /users/{userId} {
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read, update, delete: if isOwner(userId) || isAdmin();
+    }
+
+    match /users_private/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // ===== FARMS =====
+    match /farms/{farmId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isEmailVerified();
+      allow update, delete: if isOwner(resource.data.ownerId) || isAdmin();
+    }
+
+    // ===== PRODUCTS =====
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isEmailVerified();
+      allow update, delete: if isOwner(resource.data.ownerId) || isAdmin();
+    }
+
+    // ===== ORDERS =====
+    match /orders/{orderId} {
+      allow create: if isSignedIn() && isEmailVerified();
+      allow read: if isSignedIn() &&
+        (resource.data.buyerId == request.auth.uid ||
+         resource.data.sellerId == request.auth.uid ||
+         isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // ===== FORUM POSTS =====
+    match /forumPosts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isEmailVerified();
+      allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
+    }
+
+    // ===== PUBLIC POSTS =====
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isEmailVerified();
+      allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
+
+      // ===== COMMENTS SUBCOLLECTION =====
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn() && isEmailVerified();
+        allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
+      }
+    }
+  }
+}
