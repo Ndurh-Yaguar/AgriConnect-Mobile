@@ -1,77 +1,109 @@
 rules_version = '2';
 service cloud.firestore {
-  // ===== HELPER FUNCTIONS =====
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function isEmailVerified() {
-    return isSignedIn() && request.auth.token.email_verified == true;
-  }
-
-  function isAdmin() {
-    return isSignedIn() && request.auth.token.admin == true;
-  }
-
-  function isOwner(field) {
-    return isSignedIn() && field == request.auth.uid;
-  }
-
   match /databases/{database}/documents {
 
-    // ===== USERS =====
-    match /users/{userId} {
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow read, update, delete: if isOwner(userId) || isAdmin();
+    // ---------- helpers ----------
+    function signedIn()  { return request.auth != null; }
+    function verified()  { return signedIn() && request.auth.token.email_verified == true; }
+    // Admin = Firebase Auth CUSTOM CLAIM (set with scripts/set-admin.js).
+    // Never trust a field in a user-writable document for this.
+    function isAdmin()   { return signedIn() && request.auth.token.admin == true; }
+    function isOwner(uid){ return signedIn() && request.auth.uid == uid; }
+    function untouched(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
 
+    // ---------- users ----------
+    match /users/{userId} {
+      allow create: if isOwner(userId)
+                    && request.resource.data.get('isAdmin', false) == false
+                    && request.resource.data.get('role', 'customer') != 'admin';
+      allow read:   if isOwner(userId) || isAdmin();
+      // users may edit their profile but never their own privilege/moderation fields
+      allow update: if (isOwner(userId) && untouched(['isAdmin', 'role', 'status', 'banned', 'reports']))
+                    || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Holds pendingFarm until the email is verified (used by BOTH apps)
     match /users_private/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // ===== FARMS =====
-    match /farms/{farmId} {
-      allow read: if true;
-      allow create: if isSignedIn() && isEmailVerified();
-      allow update, delete: if isOwner(resource.data.ownerId) || isAdmin();
-    }
-
-    // ===== PRODUCTS =====
+    // ---------- products ----------
     match /products/{productId} {
       allow read: if true;
-      allow create: if isSignedIn() && isEmailVerified();
-      allow update, delete: if isOwner(resource.data.ownerId) || isAdmin();
+      // New products must belong to the caller and start as "pending"
+      allow create: if verified()
+                    && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.status == 'pending';
+      // Owner may edit only while pending, and cannot self-approve or hand over ownership
+      allow update: if (isOwner(resource.data.ownerId)
+                        && resource.data.status == 'pending'
+                        && request.resource.data.status == 'pending'
+                        && request.resource.data.ownerId == resource.data.ownerId)
+                    || isAdmin();
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
     }
 
-    // ===== ORDERS =====
+    // ---------- farms ----------
+    match /farms/{farmId} {
+      allow read: if true;
+      allow create: if verified() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if (isOwner(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId)
+                    || isAdmin();
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+    }
+
+    // ---------- orders ----------
     match /orders/{orderId} {
-      allow create: if isSignedIn() && isEmailVerified();
-      allow read: if isSignedIn() &&
-        (resource.data.buyerId == request.auth.uid ||
-         resource.data.sellerId == request.auth.uid ||
-         isAdmin());
+      allow create: if verified() && request.resource.data.buyerId == request.auth.uid;
+      allow read:   if signedIn() && (resource.data.buyerId == request.auth.uid
+                                   || resource.data.sellerId == request.auth.uid
+                                   || isAdmin());
       allow update, delete: if isAdmin();
     }
 
-    // ===== FORUM POSTS =====
+    // ---------- forum ----------
     match /forumPosts/{postId} {
       allow read: if true;
-      allow create: if isSignedIn() && isEmailVerified();
-      allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
+      allow create: if verified() && request.resource.data.authorId == request.auth.uid;
+      // Mobile stores comments/reactions inside the post, so any verified user may
+      // change ONLY those two fields; everything else is author/admin only.
+      allow update: if isOwner(resource.data.authorId) || isAdmin()
+                    || (verified()
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['comments', 'reactions']));
+      allow delete: if isOwner(resource.data.authorId) || isAdmin();
     }
 
-    // ===== PUBLIC POSTS =====
+    // ---------- auctions ----------
+    match /auctions/{auctionId} {
+      allow read: if true;
+      allow create: if verified() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId) || isAdmin();
+    }
+
+    // ---------- legacy "posts" (kept from your original rules) ----------
     match /posts/{postId} {
       allow read: if true;
-      allow create: if isSignedIn() && isEmailVerified();
+      allow create: if verified() && request.resource.data.authorId == request.auth.uid;
       allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
 
-      // ===== COMMENTS SUBCOLLECTION =====
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if isSignedIn() && isEmailVerified();
+        allow create: if verified() && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
       }
     }
+
+    // ---------- admin-only (used by the web admin panel) ----------
+    match /adminLogs/{id}      { allow read, write: if isAdmin(); }
+    match /announcements/{id}  { allow read: if true; allow write: if isAdmin(); }
+    match /platform/{id}       { allow read, write: if isAdmin(); }
+
+    // NOTE: no catch-all rule. Your old `match /{document=**} { allow read: if true; }`
+    // made users, users_private and orders publicly readable. Anything not listed
+    // above is now denied.
   }
 }

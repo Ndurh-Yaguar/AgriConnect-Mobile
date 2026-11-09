@@ -1,21 +1,15 @@
 package com.example.agriconnect
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.navigation.compose.*
-import com.google.firebase.auth.FirebaseAuth
-import androidx.navigation.NavController
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -26,118 +20,74 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                val navController = rememberNavController()
-
-                // Check if already logged in and email is verified
-                val startDestination = when {
-                    auth.currentUser == null -> "login"
-                    else -> "home"
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    AppNavigation(auth)
                 }
 
-                NavHost(navController = navController, startDestination = startDestination) {
-                    composable("login") {
-                        LoginScreen(auth, navController)
-                    }
-
-                    composable("register") {
-                        RegisterScreen(auth, navController)
-                    }
-
-                    composable("home") {
-                        HomeScreen(auth, navController)
-                    }
-
-                    composable("farm") {
-                        val farmRepository = FarmRepository()
-                        FarmScreen(farmRepository = farmRepository)
-                    }
                 }
-            }
         }
     }
 }
 
 @Composable
-fun HomeScreen(auth: FirebaseAuth, navController: NavController) {
-    val user = auth.currentUser
-    val emailVerified = user?.isEmailVerified ?: false
+fun AppNavigation(auth: FirebaseAuth) {
+    val navController = rememberNavController()
+    val startDestination = if (auth.currentUser != null) "home" else "login"
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Text(
-                text = "Welcome to AgriConnect 🚜",
-                style = MaterialTheme.typography.headlineMedium
-            )
+    NavHost(navController = navController, startDestination = startDestination) {
+        // Authentication
+        composable("login") {
+            LoginScreen(auth, navController)
+        }
 
-            user?.let {
-                Text(
-                    text = "Logged in as: ${it.email}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        composable("signup") {
+            RegisterScreen(auth, navController)
+        }
 
-                // Email verification status
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (emailVerified) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.errorContainer
-                        }
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (emailVerified) {
-                                "✅ Email Verified"
-                            } else {
-                                "⚠️ Email Not Verified"
-                            },
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        if (!emailVerified) {
-                            Text(
-                                text = "Verify your email to access all features",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-            }
+        // Home
+        composable("home") {
+            HomeScreenWithNavigation(auth, navController)
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
+        // Farm Management
+        composable("farm_list") {
+            FarmListScreen(navController)
+        }
 
-            // Navigate to Farm Screen
-            Button(
-                onClick = { navController.navigate("farm") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Manage Farms")
-            }
+        composable("farm_create") {
+            val farmRepository = FarmRepository()
+            FarmCreationScreen(farmRepository, navController)
+        }
 
-            // Logout Button
-            OutlinedButton(
-                onClick = {
-                    auth.signOut()
-                    navController.navigate("login") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Logout")
-            }
+        // Product Upload
+        composable("product_upload/{farmId}/{farmName}") { backStackEntry ->
+            val farmId = backStackEntry.arguments?.getString("farmId") ?: ""
+            val farmName = backStackEntry.arguments?.getString("farmName") ?: ""
+            ProductUploadScreen(farmId, farmName, navController)
+        }
+
+        // Admin Dashboard
+        composable("admin_dashboard") {
+            AdminDashboardScreen(navController)
+        }
+
+        // Marketplace
+        composable("marketplace") {
+            MarketplaceScreen()
+        }
+
+        // 🆕 Auctions
+        composable("auctions") {
+            AuctionScreen(navController)
+        }
+
+        composable("create_auction") {
+            CreateAuctionScreen(navController)
+        }
+
+        // 🆕 Community Forum
+        composable("community_forum") {
+            CommunityForumScreen(navController)
         }
     }
 }

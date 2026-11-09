@@ -1,7 +1,6 @@
 package com.example.agriconnect
 
 import android.widget.Toast
-import androidx.camera.core.AspectRatio
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -15,8 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,14 +33,20 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.delay
 
-// Data classes for form state
-data class RegistrationState(
-    val farmName: String = "",
-    val farmType: String = "",
-    val farmSize: String = "",
-    val farmLocation: String = "",
+// Data Classes
+data class UserRegistrationState(
+    val firstName: String = "",
+    val lastName: String = "",
     val email: String = "",
     val password: String = "",
+    val phoneNumber: String = "",
+    val address: String = "",
+    val wantsToSell: Boolean = false,
+    // Optional farm details (if user wants to sell)
+    val farmName: String = "",
+    val farmType: String = "",
+    val farmLocation: String = "",
+    val farmDescription: String = "",
     val isLoading: Boolean = false,
     val errors: Map<String, String> = emptyMap(),
     val passwordStrength: PasswordStrength = PasswordStrength.WEAK
@@ -91,10 +94,7 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
             verticalArrangement = Arrangement.Center
         ) {
             // Header
-            Text(
-                text = "🌱",
-                fontSize = 48.sp
-            )
+            Text(text = "🌱", fontSize = 48.sp)
             Text(
                 text = "Welcome Back",
                 fontSize = 28.sp,
@@ -102,12 +102,20 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
-            Text(
-                text = "Sign in to your AgriConnect account",
-                fontSize = 16.sp,
-                color = Color.White.copy(alpha = 0.9f),
-                textAlign = TextAlign.Center
-            )
+            TextButton(
+                onClick = {
+                    navController.navigate("register") {
+                        popUpTo("login") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Don't have an account? Register",
+                    color = Color(0xFF4CAF50)
+                )
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 
@@ -126,7 +134,6 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
                         .fillMaxWidth()
                         .padding(32.dp)
                 ) {
-                    // Email Field
                     CustomTextField(
                         value = email,
                         onValueChange = { email = it },
@@ -141,7 +148,6 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Password Field
                     CustomTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -157,7 +163,6 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Login Button
                     Button(
                         onClick = {
                             if (email.isNotBlank() && password.isNotBlank()) {
@@ -211,9 +216,8 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Register Link
                     TextButton(
-                        onClick = { navController.navigate("register") },
+                        onClick = { navController.navigate("signup") },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -230,65 +234,63 @@ fun LoginScreen(auth: FirebaseAuth, navController: NavController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
-    var state by remember { mutableStateOf(RegistrationState()) }
+    var state by remember { mutableStateOf(UserRegistrationState()) }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val db = FirebaseFirestore.getInstance()
 
-    fun updateFarmName(name: String) {
-        state = state.copy(
-            farmName = name,
-            errors = state.errors - "farmName"
-        )
+    fun updateFirstName(value: String) {
+        state = state.copy(firstName = value, errors = state.errors - "firstName")
     }
 
-    fun updateFarmType(type: String) {
-        state = state.copy(
-            farmType = type,
-            errors = state.errors - "farmType"
-        )
+    fun updateLastName(value: String) {
+        state = state.copy(lastName = value, errors = state.errors - "lastName")
     }
 
-    fun updateFarmSize(size: String) {
-        state = state.copy(
-            farmSize = size,
-            errors = state.errors - "farmSize"
-        )
+    fun updateEmail(value: String) {
+        state = state.copy(email = value, errors = state.errors - "email")
     }
 
-    fun updateFarmLocation(location: String) {
+    fun updatePassword(value: String) {
         state = state.copy(
-            farmLocation = location,
-            errors = state.errors - "farmLocation"
-        )
-    }
-
-    fun updateEmail(email: String) {
-        state = state.copy(
-            email = email,
-            errors = state.errors - "email"
-        )
-    }
-
-    fun updatePassword(password: String) {
-        state = state.copy(
-            password = password,
+            password = value,
             errors = state.errors - "password",
-            passwordStrength = calculatePasswordStrength(password)
+            passwordStrength = calculatePasswordStrength(value)
         )
+    }
+
+    fun updatePhoneNumber(value: String) {
+        state = state.copy(phoneNumber = value, errors = state.errors - "phoneNumber")
+    }
+
+    fun updateAddress(value: String) {
+        state = state.copy(address = value, errors = state.errors - "address")
+    }
+
+    fun updateFarmName(value: String) {
+        state = state.copy(farmName = value, errors = state.errors - "farmName")
+    }
+
+    fun updateFarmType(value: String) {
+        state = state.copy(farmType = value, errors = state.errors - "farmType")
+    }
+
+    fun updateFarmLocation(value: String) {
+        state = state.copy(farmLocation = value, errors = state.errors - "farmLocation")
+    }
+
+    fun updateFarmDescription(value: String) {
+        state = state.copy(farmDescription = value)
     }
 
     fun validateForm(): Boolean {
         val errors = mutableMapOf<String, String>()
 
-        if (state.farmName.trim().length < 2) {
-            errors["farmName"] = "Farm name must be at least 2 characters"
+        if (state.firstName.trim().length < 2) {
+            errors["firstName"] = "First name is required"
         }
-        if (state.farmType.isEmpty()) {
-            errors["farmType"] = "Please select a farm type"
-        }
-        if (state.farmLocation.trim().length < 5) {
-            errors["farmLocation"] = "Please enter a valid location"
+        if (state.lastName.trim().length < 2) {
+            errors["lastName"] = "Last name is required"
         }
         if (!state.email.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
             errors["email"] = "Please enter a valid email"
@@ -297,11 +299,24 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
             errors["password"] = "Password must be at least 8 characters"
         }
 
+        // Validate farm details if user wants to sell
+        if (state.wantsToSell) {
+            if (state.farmName.trim().length < 2) {
+                errors["farmName"] = "Farm name is required to sell"
+            }
+            if (state.farmType.isEmpty()) {
+                errors["farmType"] = "Farm type is required to sell"
+            }
+            if (state.farmLocation.trim().length < 3) {
+                errors["farmLocation"] = "Farm location is required to sell"
+            }
+        }
+
         state = state.copy(errors = errors)
         return errors.isEmpty()
     }
 
-    fun registerFarmer() {
+    fun registerUser() {
         if (!validateForm()) return
 
         state = state.copy(isLoading = true)
@@ -317,29 +332,50 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                         if (emailTask.isSuccessful) {
                             Toast.makeText(
                                 context,
-                                "Registration successful! Please check your email for verification.",
+                                "Please check your email for verification!",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
                     }
 
-                    // Save farmer data to Firestore
-                    val farmerData = mapOf(
-                        "farmName" to state.farmName.trim(),
-                        "farmType" to state.farmType,
-                        "farmSize" to state.farmSize.trim(),
-                        "location" to state.farmLocation.trim(),
+                    // Save user data to Firestore
+                    val userData = mapOf(
+                        "firstName" to state.firstName.trim(),
+                        "lastName" to state.lastName.trim(),
                         "email" to state.email,
+                        "phoneNumber" to state.phoneNumber.trim(),
+                        "address" to state.address.trim(),
                         "createdAt" to FieldValue.serverTimestamp(),
-                        "status" to "active",
-                        "role" to "farmer"
+                        "emailVerified" to false,
+                        "isSeller" to state.wantsToSell
                     )
 
                     user?.let { firebaseUser ->
                         db.collection("users").document(firebaseUser.uid)
-                            .set(farmerData)
+                            .set(userData)
                             .addOnSuccessListener {
+                                // If user wants to sell, create farm after email verification check
+                                if (state.wantsToSell) {
+                                    // Farm will be created later in FarmScreen after email verification
+                                    // Store farm intent in user_private for now
+                                    val farmIntent = mapOf(
+                                        "pendingFarm" to mapOf(
+                                            "farmName" to state.farmName.trim(),
+                                            "farmType" to state.farmType,
+                                            "location" to state.farmLocation.trim(),
+                                            "description" to state.farmDescription.trim()
+                                        )
+                                    )
+                                    db.collection("users_private").document(firebaseUser.uid)
+                                        .set(farmIntent)
+                                }
+
                                 state = state.copy(isLoading = false)
+                                Toast.makeText(
+                                    context,
+                                    "Account created successfully!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                                 navController.navigate("home") {
                                     popUpTo("register") { inclusive = true }
                                 }
@@ -355,10 +391,10 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                     }
                 } else {
                     state = state.copy(isLoading = false)
-                    val errorMessage = when (task.exception?.message) {
-                        "The email address is already in use by another account." ->
+                    val errorMessage = when {
+                        task.exception?.message?.contains("email address is already in use") == true ->
                             "This email is already registered. Try signing in instead."
-                        "The password is invalid or the user does not have a password." ->
+                        task.exception?.message?.contains("password") == true ->
                             "Password should be at least 8 characters."
                         else -> task.exception?.message ?: "Registration failed"
                     }
@@ -389,10 +425,7 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
             Spacer(modifier = Modifier.height(40.dp))
 
             // Header
-            Text(
-                text = "🌱",
-                fontSize = 48.sp
-            )
+            Text(text = "🌱", fontSize = 48.sp)
             Text(
                 text = "Join AgriConnect",
                 fontSize = 28.sp,
@@ -401,7 +434,7 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "Create your farmer account",
+                text = "Create your account to start buying and selling",
                 fontSize = 16.sp,
                 color = Color.White.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center
@@ -426,7 +459,7 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     Text(
-                        text = "🚜 Create Farmer Account",
+                        text = "Create Account",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF2E7D32),
@@ -434,59 +467,32 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Farm Name
-                    CustomTextField(
-                        value = state.farmName,
-                        onValueChange = ::updateFarmName,
-                        label = "Farm Name",
-                        placeholder = "Green Valley Organic Farm",
-                        leadingIcon = Icons.Default.Home,
-                        error = state.errors["farmName"],
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                    )
-
-                    // Farm Type and Size Row
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Farm Type Dropdown
-                        Box(modifier = Modifier.weight(1f)) {
-                            FarmTypeDropdown(
-                                selectedType = state.farmType,
-                                onTypeSelected = ::updateFarmType,
-                                error = state.errors["farmType"]
-                            )
-                        }
-
-                        // Farm Size
+                    // Personal Information
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(modifier = Modifier.weight(1f)) {
                             CustomTextField(
-                                value = state.farmSize,
-                                onValueChange = ::updateFarmSize,
-                                label = "Size (ha)",
-                                placeholder = "5.0",
-                                leadingIcon = Icons.Default.Edit,
-                                error = state.errors["farmSize"],
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Decimal,
-                                    imeAction = ImeAction.Next
-                                )
+                                value = state.firstName,
+                                onValueChange = ::updateFirstName,
+                                label = "First Name",
+                                placeholder = "John",
+                                leadingIcon = Icons.Default.Person,
+                                error = state.errors["firstName"],
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            CustomTextField(
+                                value = state.lastName,
+                                onValueChange = ::updateLastName,
+                                label = "Last Name",
+                                placeholder = "Doe",
+                                leadingIcon = Icons.Default.Person,
+                                error = state.errors["lastName"],
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
                             )
                         }
                     }
 
-                    // Farm Location
-                    CustomTextField(
-                        value = state.farmLocation,
-                        onValueChange = ::updateFarmLocation,
-                        label = "Farm Location",
-                        placeholder = "123 Farm Road, Rural Valley",
-                        leadingIcon = Icons.Default.LocationOn,
-                        error = state.errors["farmLocation"],
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                    )
-
-                    // Email
                     CustomTextField(
                         value = state.email,
                         onValueChange = ::updateEmail,
@@ -500,7 +506,6 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                         )
                     )
 
-                    // Password with Strength Indicator
                     Column {
                         CustomTextField(
                             value = state.password,
@@ -512,12 +517,10 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                             visualTransformation = PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Password,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(onDone = { registerFarmer() })
+                                imeAction = ImeAction.Next
+                            )
                         )
 
-                        // Password Strength Indicator
                         AnimatedVisibility(
                             visible = state.password.isNotEmpty(),
                             enter = fadeIn() + slideInVertically(),
@@ -527,9 +530,150 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                         }
                     }
 
+                    CustomTextField(
+                        value = state.phoneNumber,
+                        onValueChange = ::updatePhoneNumber,
+                        label = "Phone Number (Optional)",
+                        placeholder = "+27 12 345 6789",
+                        leadingIcon = Icons.Default.Phone,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Phone,
+                            imeAction = ImeAction.Next
+                        )
+                    )
+
+                    CustomTextField(
+                        value = state.address,
+                        onValueChange = ::updateAddress,
+                        label = "Address (Optional)",
+                        placeholder = "123 Street, City, Province",
+                        leadingIcon = Icons.Default.Home,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+                    )
+
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Seller Option
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (state.wantsToSell)
+                                Color(0xFFE8F5E9) else Color(0xFFF5F5F5)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { state = state.copy(wantsToSell = !state.wantsToSell) }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = state.wantsToSell,
+                                onCheckedChange = { state = state.copy(wantsToSell = it) },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = Color(0xFF4CAF50)
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "I want to sell products",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF2E7D32)
+                                )
+                                Text(
+                                    text = "Create a farm profile to list your products",
+                                    fontSize = 13.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+
+                    // Farm Details (shown if wants to sell)
+                    AnimatedVisibility(
+                        visible = state.wantsToSell,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(
+                                text = "📍 Farm Details",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32)
+                            )
+
+                            CustomTextField(
+                                value = state.farmName,
+                                onValueChange = ::updateFarmName,
+                                label = "Farm Name",
+                                placeholder = "Green Valley Farm",
+                                leadingIcon = Icons.Default.Business,
+                                error = state.errors["farmName"],
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                            )
+
+                            FarmTypeDropdown(
+                                selectedType = state.farmType,
+                                onTypeSelected = ::updateFarmType,
+                                error = state.errors["farmType"]
+                            )
+
+                            CustomTextField(
+                                value = state.farmLocation,
+                                onValueChange = ::updateFarmLocation,
+                                label = "Farm Location",
+                                placeholder = "City, Province",
+                                leadingIcon = Icons.Default.LocationOn,
+                                error = state.errors["farmLocation"],
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                            )
+
+                            CustomTextField(
+                                value = state.farmDescription,
+                                onValueChange = ::updateFarmDescription,
+                                label = "Farm Description (Optional)",
+                                placeholder = "Tell us about your farm...",
+                                leadingIcon = Icons.Default.Description,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+                            )
+
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFFF3E0)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF6C00),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Note: You'll need to verify your email before you can create your farm and list products.",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFEF6C00),
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     // Submit Button
                     Button(
-                        onClick = ::registerFarmer,
+                        onClick = ::registerUser,
                         enabled = !state.isLoading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4CAF50)
@@ -548,14 +692,13 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
                             Text("Creating Account...")
                         } else {
                             Text(
-                                text = "Create Farmer Account",
+                                text = "Create Account",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    // Login Link
                     TextButton(
                         onClick = { navController.navigate("login") },
                         modifier = Modifier.fillMaxWidth()
@@ -573,7 +716,7 @@ fun RegisterScreen(auth: FirebaseAuth, navController: NavController) {
     }
 }
 
-// Helper Composables
+// Helper Composables (same as before)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomTextField(
@@ -653,7 +796,7 @@ fun FarmTypeDropdown(
                 placeholder = { Text("Select type") },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
+                        imageVector = Icons.Default.Category,
                         contentDescription = null,
                         tint = Color(0xFF4CAF50)
                     )
@@ -732,7 +875,6 @@ fun PasswordStrengthIndicator(strength: PasswordStrength) {
     }
 }
 
-// Helper function
 fun calculatePasswordStrength(password: String): PasswordStrength {
     if (password.length < 8) return PasswordStrength.WEAK
 

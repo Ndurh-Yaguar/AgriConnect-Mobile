@@ -1,15 +1,40 @@
+
+# Android Studio
+.idea/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+
+# Gradle
+.gradle/
+build/
+**/build/
 local.properties
+
+# Android build output
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Node.js dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+serviceAccount*.json
+
+# Firebase debug logs
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+*.log
+
+# Temporary Firebase files
+*.bak
+
+# Operating system
+.DS_Store
+Thumbs.db

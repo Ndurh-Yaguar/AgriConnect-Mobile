@@ -1,0 +1,206 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ===== HELPER FUNCTIONS =====
+
+    // Check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Check if email is verified
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Check if user is admin
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    // Check if user owns the resource
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Validate image file type
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // Validate PDF file type
+    function isPDF() {
+      return request.resource.contentType == 'application/pdf';
+    }
+
+    // Check file size (max 10MB for images, 5MB for PDFs)
+    function isValidImageSize() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+
+    function isValidPDFSize() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // ===== PRODUCTS FOLDER =====
+    // Structure: /products/{productId}/{filename}
+    match /products/{productId}/{filename} {
+
+      // Allow READ for everyone (public marketplace images)
+      allow read: if true;
+
+      // Allow WRITE (upload) only for verified users
+      // Users can only upload images and PDFs
+      allow create: if isSignedIn()
+                    && isEmailVerified()
+                    && (
+                      (isImage() && isValidImageSize()) ||
+                      (isPDF() && isValidPDFSize())
+                    );
+
+      // Allow UPDATE for owner or admin
+      // Product owner is determined by the productId pattern
+      allow update: if isSignedIn()
+                    && isEmailVerified()
+                    && (
+                      (isImage() && isValidImageSize()) ||
+                      (isPDF() && isValidPDFSize())
+                    );
+
+      // Allow DELETE only for owner or admin
+      allow delete: if isSignedIn() && (isEmailVerified() || isAdmin());
+    }
+
+    // ===== FARM IMAGES FOLDER =====
+    // Structure: /farms/{farmId}/{filename}
+    match /farms/{farmId}/{filename} {
+
+      // Allow READ for everyone
+      allow read: if true;
+
+      // Allow CREATE for verified users (farm images)
+      allow create: if isSignedIn()
+                    && isEmailVerified()
+                    && isImage()
+                    && isValidImageSize();
+
+      // Allow UPDATE for authenticated verified users
+      allow update: if isSignedIn()
+                    && isEmailVerified()
+                    && isImage()
+                    && isValidImageSize();
+
+      // Allow DELETE for authenticated users or admin
+      allow delete: if isSignedIn() && (isEmailVerified() || isAdmin());
+    }
+
+    // ===== USER PROFILE IMAGES =====
+    // Structure: /users/{userId}/profile/{filename}
+    match /users/{userId}/profile/{filename} {
+
+      // Allow READ for everyone
+      allow read: if true;
+
+      // Allow WRITE only for the user themselves
+      allow create, update: if isOwner(userId)
+                            && isImage()
+                            && isValidImageSize();
+
+      // Allow DELETE for owner or admin
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ===== CERTIFICATES FOLDER (Alternative structure) =====
+    // Structure: /certificates/{userId}/{certificateId}
+    match /certificates/{userId}/{certificateId} {
+
+      // Allow READ for owner and admin only (sensitive documents)
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Allow CREATE for owner only
+      allow create: if isOwner(userId)
+                    && isEmailVerified()
+                    && (
+                      (isImage() && isValidImageSize()) ||
+                      (isPDF() && isValidPDFSize())
+                    );
+
+      // Allow UPDATE for owner only
+      allow update: if isOwner(userId)
+                    && (
+                      (isImage() && isValidImageSize()) ||
+                      (isPDF() && isValidPDFSize())
+                    );
+
+      // Allow DELETE for owner or admin
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ===== ADMIN DOCUMENTS =====
+    // Structure: /admin/{documentId}
+    match /admin/{documentId} {
+
+      // Only admins can read/write admin documents
+      allow read, write: if isAdmin();
+    }
+
+    // ===== TEMPORARY UPLOADS =====
+    // Structure: /temp/{userId}/{filename}
+    // Used for temporary file storage before processing
+    match /temp/{userId}/{filename} {
+
+      // Users can only access their own temp files
+      allow read, write: if isOwner(userId);
+
+      // Auto-delete after 24 hours (handled by Cloud Functions)
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ===== DEFAULT DENY =====
+    // Deny all other paths not explicitly allowed
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ===== NOTES FOR IMPLEMENTATION =====
+
+// 1. CUSTOM CLAIMS FOR ADMIN
+// To use isAdmin(), you need to set custom claims in Firebase Auth:
+//
+// Admin SDK (Node.js):
+// admin.auth().setCustomUserClaims(uid, { admin: true })
+//
+// Or use Cloud Functions:
+// exports.makeAdmin = functions.https.onCall(async (data, context) => {
+//   await admin.auth().setCustomUserClaims(data.uid, { admin: true });
+//   return { success: true };
+// });
+
+// 2. FILE SIZE LIMITS
+// - Images: 10MB max
+// - PDFs: 5MB max
+// Adjust these limits in the helper functions if needed
+
+// 3. ALLOWED FILE TYPES
+// - Images: image/* (jpg, png, gif, webp, etc.)
+// - Documents: application/pdf
+// Add more types if needed in the validation functions
+
+// 4. SECURITY CONSIDERATIONS
+// - All product images are PUBLIC (anyone can view)
+// - Certificates in /products/ are PUBLIC for transparency
+// - User certificates in /certificates/ are PRIVATE
+// - Always validate file types and sizes
+// - Always check email verification for uploads
+
+// 5. TESTING RULES
+// Use Firebase Storage Emulator or Rules Playground:
+// - Test as authenticated user
+// - Test as verified user
+// - Test as admin
+// - Test file type validation
+// - Test file size validation
