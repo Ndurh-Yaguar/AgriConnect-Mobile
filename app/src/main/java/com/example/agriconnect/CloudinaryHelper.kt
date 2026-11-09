@@ -17,7 +17,7 @@ import java.util.UUID
 object CloudinaryUploadHelper {
 
     // --- Your Cloudinary credentials ---
-    private const val CLOUD_NAME = "drcurjvsw"
+    private const val CLOUD_NAME = "my_cloud_name"
     private const val UPLOAD_PRESET = "agriconnect_upload"
 
     /**
