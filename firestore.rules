@@ -1,57 +1,165 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------- helpers ----------
-    function signedIn()  { return request.auth != null; }
-    function verified()  { return signedIn() && request.auth.token.email_verified == true; }
-    // Admin = Firebase Auth CUSTOM CLAIM (set with scripts/set-admin.js).
-    // Never trust a field in a user-writable document for this.
-    function isAdmin()   { return signedIn() && request.auth.token.admin == true; }
-    function isOwner(uid){ return signedIn() && request.auth.uid == uid; }
-    function untouched(fields) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    // ===== HELPER FUNCTIONS =====
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // ---------- users ----------
+    function isEmailVerified() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.admin == true;
+    }
+
+    function isOwner(field) {
+      return isSignedIn()
+        && field == request.auth.uid;
+    }
+
+    // ===== USERS =====
     match /users/{userId} {
-      allow create: if isOwner(userId)
-                    && request.resource.data.get('isAdmin', false) == false
-                    && request.resource.data.get('role', 'customer') != 'admin';
-      allow read:   if isOwner(userId) || isAdmin();
-      // users may edit their profile but never their own privilege/moderation fields
-      allow update: if (isOwner(userId) && untouched(['isAdmin', 'role', 'status', 'banned', 'reports']))
-                    || isAdmin();
-      allow delete: if isOwner(userId) || isAdmin();
+      allow create: if isSignedIn()
+        && request.auth.uid == userId;
+
+      allow read, update, delete: if isOwner(userId)
+        || isAdmin();
     }
 
-    // Holds pendingFarm until the email is verified (used by BOTH apps)
-    match /users_private/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
-    }
-
-    // ---------- products ----------
+    // ===== PRODUCTS =====
     match /products/{productId} {
+      // Public marketplace browsing
       allow read: if true;
-      // New products must belong to the caller and start as "pending"
-      allow create: if verified()
-                    && request.resource.data.ownerId == request.auth.uid
-                    && request.resource.data.status == 'pending';
-      // Owner may edit only while pending, and cannot self-approve or hand over ownership
-      allow update: if (isOwner(resource.data.ownerId)
-                        && resource.data.status == 'pending'
-                        && request.resource.data.status == 'pending'
-                        && request.resource.data.ownerId == resource.data.ownerId)
-                    || isAdmin();
-      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+
+      // Only verified users can create products for themselves
+      allow create: if isEmailVerified()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      // Owners can update their own pending products
+      allow update: if isOwner(resource.data.ownerId)
+        && resource.data.status == "pending"
+        && request.resource.data.ownerId == resource.data.ownerId;
+
+      // Admins can update products
+      allow update: if isAdmin();
+
+      // Owners and admins can delete products
+      allow delete: if isOwner(resource.data.ownerId)
+        || isAdmin();
     }
 
-    // ---------- farms ----------
+    // ===== FARMS =====
     match /farms/{farmId} {
+      // Public farm browsing
       allow read: if true;
-      allow create: if verified() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if (isOwner(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId)
-                    || isAdmin();
+
+      allow create: if isEmailVerified()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if (
+          isOwner(resource.data.ownerId)
+          && request.resource.data.ownerId == resource.data.ownerId
+        ) || isAdmin();
+
+      allow delete: if isOwner(resource.data.ownerId)
+        || isAdmin();
+    }
+
+    // ===== ORDERS =====
+    match /orders/{orderId} {
+      allow create: if isEmailVerified()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.sellerId is string
+        && request.resource.data.sellerId.size() > 0;
+
+      allow read: if isSignedIn()
+        && (
+          resource.data.buyerId == request.auth.uid
+          || resource.data.sellerId == request.auth.uid
+          || isAdmin()
+        );
+
+      // Only admins can update or delete orders.
+      allow update, delete: if isAdmin();
+    }
+
+    // ===== FORUM POSTS =====
+    match /forumPosts/{postId} {
+      allow read: if true;
+
+      allow create: if isEmailVerified()
+        && request.resource.data.authorId == request.auth.uid;
+
+      allow update: if (
+          isOwner(resource.data.authorId)
+          && request.resource.data.authorId == resource.data.authorId
+        ) || isAdmin();
+
+      allow delete: if isOwner(resource.data.authorId)
+        || isAdmin();
+    }
+
+    // ===== AUCTIONS =====
+    match /auctions/{auctionId} {
+      allow read: if true;
+
+      allow create: if isEmailVerified()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if (
+          isOwner(resource.data.ownerId)
+          && request.resource.data.ownerId == resource.data.ownerId
+        ) || isAdmin();
+
+      allow delete: if isOwner(resource.data.ownerId)
+        || isAdmin();
+    }
+
+    // ===== PUBLIC POSTS =====
+    match /posts/{postId} {
+      allow read: if true;
+
+      allow create: if isEmailVerified()
+        && request.resource.data.authorId == request.auth.uid;
+
+      allow update: if (
+          isOwner(resource.data.authorId)
+          && request.resource.data.authorId == resource.data.authorId
+        ) || isAdmin();
+
+      allow delete: if isOwner(resource.data.authorId)
+        || isAdmin();
+
+      // ===== COMMENTS SUBCOLLECTION =====
+      match /comments/{commentId} {
+        allow read: if true;
+
+        allow create: if isEmailVerified()
+          && request.resource.data.authorId == request.auth.uid;
+
+        allow update: if (
+            isOwner(resource.data.authorId)
+            && request.resource.data.authorId == resource.data.authorId
+          ) || isAdmin();
+
+        allow delete: if isOwner(resource.data.authorId)
+          || isAdmin();
+      }
+    }
+
+    // ===== DEFAULT DENY =====
+    // Any collection not explicitly covered above is denied.
+  }
+}
+);
       allow delete: if isOwner(resource.data.ownerId) || isAdmin();
     }
 

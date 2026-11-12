@@ -38,3 +38,14 @@ database-debug.log
 # Operating system
 .DS_Store
 Thumbs.db
+
+# Firebase private configuration
+firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
+
+# Private keys and certificates
+*.pem
+*.p12
+*.key
+
+notepad .gitignore
